@@ -1,0 +1,11 @@
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: hsdaoh Library
+Description: C Utility Library
+Version: 0.1.0
+Cflags: -I${includedir}/
+Libs: -L${libdir} -lhsdaoh
+Libs.private:  -lusb-1.0 

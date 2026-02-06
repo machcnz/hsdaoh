@@ -1,5 +1,10 @@
 # hsdaoh - High Speed Data Acquisition over HDMI
 
+This is a fork of Steve-M's brilliant 12-bit 40msps hsdaoh, to include a basic RF ADC level check prior to capture.
+This feature enables the user to check the hardware is capturing signal and to ensure signal levels are optimal and without clipping.
+To check levels launch as follows: ./hsdaoh_file --level-check  [monitor signal levels without capturing (same as -L)]
+
+
 This project aims to (ab)use cheap USB 3.0 HDMI capture sticks based on the MacroSilicon MS2130 as a general purpose USB interface.
 
 In combination with small FPGA boards with HDMI interface like the Tang Nano series, it can be used to capture high speed data streams from an external data source like an ADC, do-it-yourself SDR, or simply build a high speed logic analyzer.
