@@ -1,5 +1,6 @@
 # hsdaoh - High Speed Data Acquisition over HDMI
 
+What is new in this fork:
 This is a fork of Steve-M's brilliant 12-bit 40msps hsdaoh, to include a basic RF ADC level check prior to capture.
 This feature enables the user to check the hardware is capturing signal and to ensure signal levels are optimal and without clipping.
 To check levels launch as follows: ./hsdaoh_file --level-check  [monitor signal levels without capturing (same as -L)]
