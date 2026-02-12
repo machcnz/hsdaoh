@@ -27,6 +27,7 @@
 #include <signal.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #ifndef _WIN32
@@ -68,6 +69,27 @@ static hsdaoh_adapter_t known_devices[] = {
 	{ 0x534d, 0x2130, "MS2130 OEM" },
 	{ 0x345f, 0x2131, "MS2131" },
 };
+
+/* Helper to emit messages via callback or stderr - supports misrc-hsdaoh GUI error cntrs*/
+/* - MA 110226 */
+static void hsdaoh_emit_msg(hsdaoh_dev_t *dev,
+                           enum hsdaoh_msg_level level,
+                           const char *fmt, ...)
+{
+    char buf[512];
+
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+
+    /* forward to callback if registered */
+    if (dev && dev->msg_cb)
+        dev->msg_cb(dev->msg_cb_ctx, level, "%s", buf);
+
+    /* keep stderr for backward compatibility */
+    fputs(buf, stderr);
+}
 
 enum crc_config {
 	CRC_NONE,		/* No CRC, just 16 bit idle counter */
@@ -549,7 +571,15 @@ int hsdaoh_set_output_format(hsdaoh_dev_t *dev, hsdaoh_output_format_t format)
 
 	return 0;
 }
+/* Set message callback for error/status reporting */
+void hsdaoh_set_msg_callback(hsdaoh_dev_t *dev, hsdaoh_message_cb_t cb, void *ctx)
+{
+	if (!dev)
+		return;
 
+	dev->msg_cb = cb;
+	dev->msg_cb_ctx = ctx;
+}
 void hsdaoh_output(hsdaoh_dev_t *dev, uint16_t sid, int format, uint32_t srate, uint8_t *data, size_t len)
 {
 	hsdaoh_data_info_t data_info;
@@ -661,7 +691,8 @@ void hsdaoh_enqueue_data(hsdaoh_dev_t *dev, uint16_t sid, int format, uint32_t s
 
 		if (dev->llbuf_num && dev->llbuf_num == num_queued-2) {
 			struct llist *curelem;
-			fprintf(stderr, "Buffer dropped due to overrun!\n");
+			/* Report buffer overrun */
+			hsdaoh_emit_msg(dev, HSDAOH_ERROR, "Buffer dropped due to overrun!\n");
 			free(dev->ll_buffers->data);
 			curelem = dev->ll_buffers->next;
 			free(dev->ll_buffers);
@@ -723,9 +754,9 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	hsdaoh_extract_metadata(data, &meta, dev->width);
 
 	if (meta.magic != 0xda7acab1) {
+		/* Report sync loss via callback or stderr */
 		if (dev->stream_synced)
-			fprintf(stderr, "Lost sync to HDMI input stream\n");
-
+		hsdaoh_emit_msg(dev, HSDAOH_WARNING, "Lost sync to HDMI input stream\n");
 		dev->stream_synced = false;
 		return;
 	}
@@ -737,8 +768,10 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	if (meta.framecounter != ((dev->last_frame_cnt + 1) & 0xffff)) {
 		dev->in_order_cnt = 0;
 		if (dev->stream_synced)
-			fprintf(stderr, "Missed at least one frame, fcnt %d, expected %d!\n",
-				meta.framecounter, ((dev->last_frame_cnt + 1) & 0xffff));
+		hsdaoh_emit_msg(dev, HSDAOH_WARNING,
+    	"Missed at least one frame, fcnt %d, expected %d!\n",
+    	meta.framecounter, ((dev->last_frame_cnt + 1) & 0xffff));
+
 	} else
 		dev->in_order_cnt++;
 
@@ -749,7 +782,8 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 	uint8_t *stream0_data = malloc(dev->width-1 * dev->height  * 2);
 
 	if (!stream0_data) {
-		fprintf(stderr, "Out of memory, frame skipped!\n");
+		/* Report memory allocation failure */
+		hsdaoh_emit_msg(dev, HSDAOH_CRITICAL, "Out of memory, frame skipped!\n");
 		return;
 	}
 
@@ -772,13 +806,13 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		/* we only use 12 bits, the upper 4 bits are reserved for the metadata */
 		payload_len &= 0x0fff;
 
-		if (payload_len > dev->width-1) {
-			if (dev->stream_synced)
-				fprintf(stderr, "Invalid payload length: %d\n", payload_len);
-
-			/* discard frame */
-			free(stream0_data);
-			return;
+		if (payload_len > dev->width-1) { // Fix braces
+			if (dev->stream_synced) {
+					hsdaoh_emit_msg(dev, HSDAOH_ERROR, "Invalid payload length: %d\n", payload_len);
+			}
+				/* discard frame */
+				free(stream0_data);
+				return;
 		}
 
 		if (meta.crc_config == CRC_NONE) {
@@ -816,13 +850,15 @@ void hsdaoh_process_frame(hsdaoh_dev_t *dev, uint8_t *data, int size)
 		free(stream0_data);
 
 	if (frame_errors && dev->stream_synced) {
-		fprintf(stderr,"%d frame errors, %d frames since last error\n", frame_errors, dev->frames_since_error);
+		hsdaoh_emit_msg(dev, HSDAOH_ERROR,
+		"%d frame errors, %d frames since last error\n",
+		frame_errors, dev->frames_since_error);
 		dev->frames_since_error = 0;
-	} else
+	} else {
 		dev->frames_since_error++;
-
+	}
 	if (!dev->stream_synced && !frame_errors && (dev->in_order_cnt > 4)) {
-		fprintf(stderr, "Synchronized to HDMI input stream\n");
+		hsdaoh_emit_msg(dev, HSDAOH_INFO, "Synchronized to HDMI input stream\n");
 		dev->stream_synced = true;
 	}
 }
@@ -832,7 +868,8 @@ void _uvc_callback(uvc_frame_t *frame, void *ptr)
 	hsdaoh_dev_t *dev = (hsdaoh_dev_t *)ptr;
 
 	if (frame->frame_format != UVC_COLOR_FORMAT_YUYV) {
-		fprintf(stderr, "Error: incorrect frame format!\n");
+		/* Report incorrect frame format */
+		hsdaoh_emit_msg(dev, HSDAOH_ERROR, "Error: incorrect frame format!\n");
 		return;
 	}
 

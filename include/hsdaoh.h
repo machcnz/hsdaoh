@@ -30,6 +30,8 @@
 extern "C" {
 #endif
 
+#include <stddef.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <hsdaoh_export.h>
@@ -110,8 +112,37 @@ HSDAOH_API int hsdaoh_get_usb_strings(hsdaoh_dev_t *dev, char *manufact,
 				      char *product, char *serial);
 
 /* streaming functions */
-
 typedef void(*hsdaoh_read_cb_t)(hsdaoh_data_info_t *data_info);
+
+/*
+ * Message callback support for error and status reporting
+ * Allows applications to receive error messages and status updates
+ * instead of relying on stderr output.
+ */
+
+/*!
+ * Message severity levels for hsdaoh_message_cb_t callback.
+ */
+enum hsdaoh_msg_level {
+	HSDAOH_INFO = 0,
+	HSDAOH_WARNING,
+	HSDAOH_ERROR,
+	HSDAOH_CRITICAL
+};
+
+/*
+ * Message callback function type.
+ * Called when the library encounters errors, warnings, or status changes.
+ * \param ctx user context pointer set via hsdaoh_set_msg_callback()
+ * \param level severity level of the message
+ * \param format printf-style format string
+ * \param ... variable arguments for format string
+ * Note: Messages are the same as would be printed to stderr if no callback is set.
+ *       Examples: "Lost sync to HDMI input stream", "%d frame errors, %d frames since last error"
+ */
+typedef void (*hsdaoh_message_cb_t)(void *ctx, enum hsdaoh_msg_level level, const char *format, ...);
+
+HSDAOH_API void hsdaoh_set_msg_callback(hsdaoh_dev_t *dev, hsdaoh_message_cb_t cb, void *ctx);
 
 /*!
  * Start streaming data from the device.

@@ -21,6 +21,11 @@ struct hsdaoh_dev {
 	struct libusb_device_handle *devh;
 	hsdaoh_read_cb_t cb;
 	void *cb_ctx;
+
+	/* Message callback for error/status reporting */
+	hsdaoh_message_cb_t msg_cb;
+	void *msg_cb_ctx;
+
 	enum hsdaoh_async_status async_status;
 	int async_cancel;
 	uint16_t vid;
