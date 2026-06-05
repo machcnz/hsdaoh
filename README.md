@@ -4,6 +4,8 @@
 - 2026-02-13: Added a message callback path intended for MISRC GUI integration:
   - forwards hsdaoh status/warning/error messages to the GUI
   - enables GUI-side error counting / status display (in addition to stderr logging)
+** For the VHS-Decode Project:**
+- 2026-06-05: For VHS Decode project, added PDF instructions to modify the AD9226 Module for 50ohm impedance/termination and standardising gain.
   
 This is a fork of Steve-M's brilliant 12-bit 40msps hsdaoh, to include a basic RF ADC level check prior to capture.
 This feature enables the user to check the hardware is capturing signal and to ensure signal levels are optimal and without clipping.
